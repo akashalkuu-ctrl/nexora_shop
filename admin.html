@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>NEXORA SHOP - Admin Panel</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;background:#10091d;color:white;font-family:Arial,sans-serif;padding:20px}
+.container{max-width:650px;margin:auto}
+h1{color:#c084fc;text-align:center}
+.card{background:#211333;padding:20px;border-radius:15px;margin:18px 0}
+input,textarea,button{width:100%;padding:13px;margin:7px 0;border:0;border-radius:8px}
+input,textarea{background:#352348;color:white}
+button{background:#9333ea;color:white;font-weight:bold;cursor:pointer}
+.delete{background:#dc2626}
+.product{background:#352348;padding:12px;border-radius:9px;margin:10px 0}
+.hidden{display:none}
+small{color:#c4b5fd}
+</style>
+</head>
+<body>
+<div class="container">
+<h1>NEXORA SHOP</h1>
+<p style="text-align:center">ADMIN CONTROL PANEL</p>
+
+<div class="card" id="loginBox">
+<h3>Admin Login</h3>
+<input id="email" type="email" placeholder="Admin Email">
+<input id="password" type="password" placeholder="Password">
+<button id="loginBtn">LOGIN</button>
+<p id="loginMsg"></p>
+</div>
+
+<div id="panel" class="hidden">
+<div class="card">
+<h3>Add New Product</h3>
+<input id="name" placeholder="Product Name">
+<input id="price" type="number" min="0" placeholder="Price">
+<input id="category" placeholder="Category">
+<textarea id="description" placeholder="Product Description"></textarea>
+<button id="addBtn">ADD PRODUCT</button>
+<p id="msg"></p>
+</div>
+
+<div class="card">
+<h3>All Products</h3>
+<div id="products">Loading...</div>
+<button id="logoutBtn">LOGOUT</button>
+</div>
+</div>
+</div>
+
+<script type="module">
+import {initializeApp} from
+"https://www.gstatic.com/firebasejs/13.1.0/firebase-app.js";
+
+import {
+ getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut
+} from "https://www.gstatic.com/firebasejs/13.1.0/firebase-auth.js";
+
+import {
+ getFirestore, collection, addDoc, getDocs,
+ deleteDoc, doc, serverTimestamp
+} from "https://www.gstatic.com/firebasejs/13.1.0/firebase-firestore.js";
+
+const firebaseConfig = {
+ apiKey: "AIzaSyCkbbEN3rbFpec3r6Zxpn8GXc3sKVqb_Cg",
+ authDomain: "nexora-shop-74244.firebaseapp.com",
+ projectId: "nexora-shop-74244",
+ storageBucket: "nexora-shop-74244.firebasestorage.app",
+ messagingSenderId: "536829579657",
+ appId: "1:536829579657:web:ca3c6a12cb523c3a0b5158"
+};
+
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
+
+const $ = id => document.getElementById(id);
+
+$("loginBtn").onclick = async () => {
+ try {
+  await signInWithEmailAndPassword(
+   auth, $("email").value.trim(), $("password").value
+  );
+  $("loginMsg").textContent = "";
+ } catch(e) {
+  $("loginMsg").textContent = "Login হয়নি। Email ও Password যাচাই করো।";
+ }
+};
+
+onAuthStateChanged(auth, user => {
+ $("loginBox").classList.toggle("hidden", !!user);
+ $("panel").classList.toggle("hidden", !user);
+ if(user) loadProducts();
+});
+
+$("logoutBtn").onclick = () => signOut(auth);
+
+$("addBtn").onclick = async () => {
+ const name = $("name").value.trim();
+ const price = Number($("price").value);
+ const category = $("category").value.trim();
+ const description = $("description").value.trim();
+
+ if(!name || !category || !Number.isFinite(price) || price < 0) {
+  $("msg").textContent = "নাম, সঠিক দাম ও ক্যাটাগরি দাও।";
+  return;
+ }
+
+ try {
+  await addDoc(collection(db,"products"), {
+   name, price, category, description,
+   active:true,
+   createdAt:serverTimestamp()
+  });
+  $("msg").textContent = "পণ্য যোগ হয়েছে!";
+  $("name").value = "";
+  $("price").value = "";
+  $("category").value = "";
+  $("description").value = "";
+  loadProducts();
+ } catch(e) {
+  $("msg").textContent = "পণ্য যোগ হয়নি। Firestore Rules পরীক্ষা করো।";
+ }
+};
+
+async function loadProducts() {
+ const area = $("products");
+ area.textContent = "Loading...";
+ try {
+  const snapshot = await getDocs(collection(db,"products"));
+  area.innerHTML = "";
+  if(snapshot.empty) {
+   area.textContent = "কোনো পণ্য নেই।";
+   return;
+  }
+
+  snapshot.forEach(item => {
+   const p = item.data();
+   const box = document.createElement("div");
+   box.className = "product";
+
+   const title = document.createElement("b");
+   title.textContent = p.name || "Unnamed product";
+
+   const details = document.createElement("p");
+   details.textContent =
+    "দাম: ৳" + (p.price ?? 0) +
+    " | ক্যাটাগরি: " + (p.category || "");
+
+   const del = document.createElement("button");
+   del.className = "delete";
+   del.textContent = "DELETE";
+   del.onclick = async () => {
+    if(confirm("এই পণ্যটি ডিলিট করবে?")) {
+     try {
+      await deleteDoc(doc(db,"products",item.id));
+      loadProducts();
+     } catch(e) {
+      alert("ডিলিট হয়নি। Firestore Rules পরীক্ষা করো।");
+     }
+    }
+   };
+
+   box.append(title,details,del);
+   area.appendChild(box);
+  });
+ } catch(e) {
+  area.textContent = "পণ্য লোড হয়নি। Firestore Rules পরীক্ষা করো।";
+ }
+}
+</script>
+</body>
+  </html>
