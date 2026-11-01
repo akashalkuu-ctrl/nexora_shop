@@ -72,73 +72,111 @@ footer{text-align:center;padding:20px;background:#24113e;color:white;margin-top:
 
 <footer>© 2026 NEXORA SHOP | All Rights Reserved</footer>
 
-<script>
-// নতুন পণ্য যোগ করতে এই তালিকায় নতুন তথ্য যোগ করবে।
-const products=[
-{id:1,name:"Gaming Finger Sleeves",category:"Gaming",price:60,image:"https://images.unsplash.com/photo-1593305841991-05c297ba4575?w=500"},
-{id:2,name:"Gaming Headphone",category:"Gaming",price:650,image:"https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=500"},
-{id:3,name:"Mobile Accessories",category:"Mobile",price:150,image:"https://images.unsplash.com/photo-1511707171634-5f897ff02aa9?w=500"},
-{id:4,name:"Wireless Earbuds",category:"Electronics",price:450,image:"https://images.unsplash.com/photo-1606220945770-b5b6c2c55bf1?w=500"},
-{id:5,name:"Fashion Watch",category:"Fashion",price:350,image:"https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=500"}
-];
+<<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/13.1.0/firebase-app.js";
+import {
+  getFirestore, collection, onSnapshot
+} from "https://www.gstatic.com/firebasejs/13.1.0/firebase-firestore.js";
 
-let cart=[];
-let category="সব";
+const firebaseConfig = {
+  apiKey: "AIzaSyCkbbEN3rbFpec3r6Zxpn8GXc3sKVqb_Cg",
+  authDomain: "nexora-shop-74244.firebaseapp.com",
+  projectId: "nexora-shop-74244",
+  storageBucket: "nexora-shop-74244.firebasestorage.app",
+  messagingSenderId: "536829579657",
+  appId: "1:536829579657:web:ca3c6a12cb523c3a0b5158"
+};
 
-function setCategory(c){
-category=c;
-showProducts();
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
+
+let products = [];
+let cart = [];
+let category = "সব";
+
+window.setCategory = function(c) {
+  category = c;
+  showProducts();
+};
+
+window.showProducts = function() {
+  const search = document.getElementById("search").value.toLowerCase();
+
+  const list = products.filter(p =>
+    (category === "সব" || p.category === category) &&
+    (p.name || "").toLowerCase().includes(search)
+  );
+
+  document.getElementById("products").innerHTML = list.map(p => `
+    <div class="card">
+      <img src="${p.image || 'https://placehold.co/500x350?text=NEXORA+SHOP'}" alt="">
+      <div class="info">
+        <b>${p.name || ""}</b>
+        <div>${p.category || ""}</div>
+        <div class="price">৳${p.price || 0}</div>
+        <button class="add" onclick="addCart('${p.id}')">কার্টে যোগ করুন</button>
+      </div>
+    </div>
+  `).join("") || "কোনো পণ্য পাওয়া যায়নি।";
+};
+
+window.addCart = function(id) {
+  const p = products.find(x => x.id === id);
+  if (!p) return;
+
+  const item = cart.find(x => x.id === id);
+  if (item) item.qty++;
+  else cart.push({...p, qty: 1});
+
+  showCart();
+};
+
+function showCart() {
+  document.getElementById("cartItems").innerHTML = cart.length
+    ? cart.map(p => `${p.name} × ${p.qty} — ৳${p.price * p.qty}`).join("<br>")
+    : "এখনো কোনো পণ্য যোগ করা হয়নি।";
+
+  const total = cart.reduce((s, p) => s + p.price * p.qty, 0);
+  document.getElementById("total").innerText = "মোট: ৳" + total;
 }
 
-function showProducts(){
-let search=document.getElementById("search").value.toLowerCase();
-let list=products.filter(p=>
-(category==="সব"||p.category===category)&&
-p.name.toLowerCase().includes(search)
-);
-document.getElementById("products").innerHTML=list.map(p=>`
-<div class="card">
-<img src="${p.image}" alt="${p.name}">
-<div class="info">
-<b>${p.name}</b>
-<div>${p.category}</div>
-<div class="price">৳${p.price}</div>
-<button class="add" onclick="addCart(${p.id})">কার্টে যোগ করুন</button>
-</div>
-</div>`).join("")||"কোনো পণ্য পাওয়া যায়নি।";
-}
+window.placeOrder = function() {
+  if (!cart.length) {
+    alert("আগে কার্টে পণ্য যোগ করুন");
+    return;
+  }
 
-function addCart(id){
-let p=products.find(x=>x.id===id);
-let item=cart.find(x=>x.id===id);
-if(item)item.qty++;
-else cart.push({...p,qty:1});
+  const n = document.getElementById("customer").value.trim();
+  const ph = document.getElementById("phone").value.trim();
+  const a = document.getElementById("address").value.trim();
+
+  if (!n || !ph || !a) {
+    alert("সব তথ্য পূরণ করুন");
+    return;
+  }
+
+  const details = cart.map(p =>
+    `${p.name} × ${p.qty} = ৳${p.price * p.qty}`
+  ).join("\n");
+
+  const total = cart.reduce((s, p) => s + p.price * p.qty, 0);
+  const msg = `NEXORA SHOP ORDER\nনাম: ${n}\nফোন: ${ph}\nঠিকানা: ${a}\n\n${details}\nমোট: ৳${total}`;
+
+  window.open("https://wa.me/8801824697173?text=" + encodeURIComponent(msg), "_blank");
+};
+
+onSnapshot(collection(db, "products"), snapshot => {
+  products = snapshot.docs
+    .map(d => ({id: d.id, ...d.data()}))
+    .filter(p => p.active === true);
+
+  showProducts();
+}, error => {
+  document.getElementById("products").textContent =
+    "পণ্য লোড হয়নি: " + error.message;
+});
+
 showCart();
-}
-
-function showCart(){
-document.getElementById("cartItems").innerHTML=cart.length?
-cart.map(p=>`${p.name} × ${p.qty} — ৳${p.price*p.qty}`).join("<br>"):
-"এখনো কোনো পণ্য যোগ করা হয়নি।";
-let total=cart.reduce((s,p)=>s+p.price*p.qty,0);
-document.getElementById("total").innerText="মোট: ৳"+total;
-}
-
-function placeOrder(){
-if(!cart.length){alert("আগে কার্টে পণ্য যোগ করুন");return;}
-let n=document.getElementById("customer").value.trim();
-let ph=document.getElementById("phone").value.trim();
-let a=document.getElementById("address").value.trim();
-if(!n||!ph||!a){alert("সব তথ্য পূরণ করুন");return;}
-
-let details=cart.map(p=>`${p.name} × ${p.qty} = ৳${p.price*p.qty}`).join("\n");
-let total=cart.reduce((s,p)=>s+p.price*p.qty,0);
-let msg=`NEXORA SHOP ORDER\nনাম: ${n}\nফোন: ${ph}\nঠিকানা: ${a}\n\n${details}\nমোট: ৳${total}`;
-window.open("https://wa.me/8801824697173?text="+encodeURIComponent(msg),"_blank");
-}
-
-showProducts();
 </script>
 </body>
 </html>
- 
