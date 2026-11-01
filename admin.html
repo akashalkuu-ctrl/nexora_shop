@@ -3,174 +3,175 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>NEXORA SHOP - Admin Panel</title>
+<title>NEXORA SHOP ADMIN</title>
 <style>
-*{box-sizing:border-box}
-body{margin:0;background:#10091d;color:white;font-family:Arial,sans-serif;padding:20px}
-.container{max-width:650px;margin:auto}
-h1{color:#c084fc;text-align:center}
-.card{background:#211333;padding:20px;border-radius:15px;margin:18px 0}
-input,textarea,button{width:100%;padding:13px;margin:7px 0;border:0;border-radius:8px}
-input,textarea{background:#352348;color:white}
-button{background:#9333ea;color:white;font-weight:bold;cursor:pointer}
-.delete{background:#dc2626}
-.product{background:#352348;padding:12px;border-radius:9px;margin:10px 0}
-.hidden{display:none}
-small{color:#c4b5fd}
+body{background:#10091f;color:white;font-family:Arial;padding:18px}
+.box{max-width:450px;margin:auto;background:#211437;padding:20px;border-radius:15px}
+input,select,textarea,button{width:100%;box-sizing:border-box;padding:12px;margin:7px 0;border:0;border-radius:8px}
+button{background:#9333ea;color:white;font-weight:bold}
+h2{color:#d8a5ff}
+.product{background:#35234c;padding:12px;margin:10px 0;border-radius:10px}
+img{width:100%;max-height:180px;object-fit:contain}
 </style>
 </head>
 <body>
-<div class="container">
-<h1>NEXORA SHOP</h1>
-<p style="text-align:center">ADMIN CONTROL PANEL</p>
+<div class="box">
+<h2>NEXORA SHOP ADMIN</h2>
 
-<div class="card" id="loginBox">
-<h3>Admin Login</h3>
+<div id="login">
 <input id="email" type="email" placeholder="Admin Email">
-<input id="password" type="password" placeholder="Password">
-<button id="loginBtn">LOGIN</button>
-<p id="loginMsg"></p>
+<input id="password" type="password" placeholder="Admin Password">
+<button onclick="login()">LOGIN</button>
 </div>
 
-<div id="panel" class="hidden">
-<div class="card">
-<h3>Add New Product</h3>
-<input id="name" placeholder="Product Name">
-<input id="price" type="number" min="0" placeholder="Price">
-<input id="category" placeholder="Category">
-<textarea id="description" placeholder="Product Description"></textarea>
-<button id="addBtn">ADD PRODUCT</button>
-<p id="msg"></p>
-</div>
+<div id="panel" hidden>
+<h3>নতুন পণ্য যোগ করুন</h3>
+<input id="name" placeholder="পণ্যের নাম">
+<input id="price" type="number" placeholder="দাম">
+<input id="category" placeholder="ক্যাটাগরি">
+<textarea id="description" placeholder="পণ্যের বিবরণ"></textarea>
 
-<div class="card">
-<h3>All Products</h3>
-<div id="products">Loading...</div>
-<button id="logoutBtn">LOGOUT</button>
-</div>
+<label>গ্যালারি থেকে ছবি বাছাই করুন</label>
+<input id="photo" type="file" accept="image/*">
+<img id="preview" hidden>
+
+<button onclick="addProduct()">পণ্য যোগ করুন</button>
+<button onclick="logout()">LOGOUT</button>
+
+<h3>পণ্যের তালিকা</h3>
+<div id="products"></div>
 </div>
 </div>
 
 <script type="module">
-import {initializeApp} from
-"https://www.gstatic.com/firebasejs/13.1.0/firebase-app.js";
+import {initializeApp} from "https://www.gstatic.com/firebasejs/13.1.0/firebase-app.js";
+import {getAuth,signInWithEmailAndPassword,signOut,onAuthStateChanged}
+from "https://www.gstatic.com/firebasejs/13.1.0/firebase-auth.js";
+import {getFirestore,collection,addDoc,getDocs,deleteDoc,doc}
+from "https://www.gstatic.com/firebasejs/13.1.0/firebase-firestore.js";
 
-import {
- getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut
-} from "https://www.gstatic.com/firebasejs/13.1.0/firebase-auth.js";
-
-import {
- getFirestore, collection, addDoc, getDocs,
- deleteDoc, doc, serverTimestamp
-} from "https://www.gstatic.com/firebasejs/13.1.0/firebase-firestore.js";
-
-const firebaseConfig = {
- apiKey: "AIzaSyCkbbEN3rbFpec3r6Zxpn8GXc3sKVqb_Cg",
- authDomain: "nexora-shop-74244.firebaseapp.com",
- projectId: "nexora-shop-74244",
- storageBucket: "nexora-shop-74244.firebasestorage.app",
- messagingSenderId: "536829579657",
- appId: "1:536829579657:web:ca3c6a12cb523c3a0b5158"
+const firebaseConfig={
+apiKey:"AIzaSyCkbbEN3rbFpec3r6Zxpn8GXc3sKVqb_Cg",
+authDomain:"nexora-shop-74244.firebaseapp.com",
+projectId:"nexora-shop-74244",
+storageBucket:"nexora-shop-74244.firebasestorage.app",
+messagingSenderId:"536829579657",
+appId:"1:536829579657:web:ca3c6a12cb523c3a0b5158"
 };
 
-const app = initializeApp(firebaseConfig);
-const auth = getAuth(app);
-const db = getFirestore(app);
+const app=initializeApp(firebaseConfig);
+const auth=getAuth(app);
+const db=getFirestore(app);
 
-const $ = id => document.getElementById(id);
-
-$("loginBtn").onclick = async () => {
- try {
-  await signInWithEmailAndPassword(
-   auth, $("email").value.trim(), $("password").value
-  );
-  $("loginMsg").textContent = "";
- } catch(e) {
-  $("loginMsg").textContent = "Login হয়নি। Email ও Password যাচাই করো।";
- }
+window.login=async()=>{
+try{
+await signInWithEmailAndPassword(auth,email.value,password.value);
+}catch(e){alert("লগইন হয়নি: "+e.message);}
 };
 
-onAuthStateChanged(auth, user => {
- $("loginBox").classList.toggle("hidden", !!user);
- $("panel").classList.toggle("hidden", !user);
- if(user) loadProducts();
+window.logout=()=>signOut(auth);
+
+onAuthStateChanged(auth,user=>{
+loginDiv(user);
+if(user)loadProducts();
 });
 
-$("logoutBtn").onclick = () => signOut(auth);
+function loginDiv(user){
+document.getElementById("login").hidden=!!user;
+document.getElementById("panel").hidden=!user;
+}
 
-$("addBtn").onclick = async () => {
- const name = $("name").value.trim();
- const price = Number($("price").value);
- const category = $("category").value.trim();
- const description = $("description").value.trim();
+let imageData="";
 
- if(!name || !category || !Number.isFinite(price) || price < 0) {
-  $("msg").textContent = "নাম, সঠিক দাম ও ক্যাটাগরি দাও।";
-  return;
- }
+photo.addEventListener("change",()=>{
+const file=photo.files[0];
+if(!file)return;
+if(file.size>5*1024*1024){
+alert("৫ MB-এর কম ছবি নির্বাচন করো");
+photo.value="";
+return;
+}
+const reader=new FileReader();
+reader.onload=()=>{
+const img=new Image();
+img.onload=()=>{
+const canvas=document.createElement("canvas");
+const scale=Math.min(500/img.width,500/img.height,1);
+canvas.width=img.width*scale;
+canvas.height=img.height*scale;
+canvas.getContext("2d").drawImage(img,0,0,canvas.width,canvas.height);
+imageData=canvas.toDataURL("image/jpeg",0.6);
+preview.src=imageData;
+preview.hidden=false;
+};
+img.src=reader.result;
+};
+reader.readAsDataURL(file);
+});
 
- try {
-  await addDoc(collection(db,"products"), {
-   name, price, category, description,
-   active:true,
-   createdAt:serverTimestamp()
-  });
-  $("msg").textContent = "পণ্য যোগ হয়েছে!";
-  $("name").value = "";
-  $("price").value = "";
-  $("category").value = "";
-  $("description").value = "";
-  loadProducts();
- } catch(e) {
-  $("msg").textContent = "পণ্য যোগ হয়নি। Firestore Rules পরীক্ষা করো।";
- }
+window.addProduct=async()=>{
+const name=document.getElementById("name").value.trim();
+const price=Number(document.getElementById("price").value);
+const category=document.getElementById("category").value.trim();
+const description=document.getElementById("description").value.trim();
+
+if(!name||!price||!category){
+alert("নাম, দাম ও ক্যাটাগরি লিখো");
+return;
+}
+if(!imageData){
+alert("গ্যালারি থেকে ছবি নির্বাচন করো");
+return;
+}
+
+try{
+await addDoc(collection(db,"products"),{
+name,price,category,description,image:imageData,active:true
+});
+alert("পণ্য যোগ হয়েছে!");
+nameInputReset();
+loadProducts();
+}catch(e){alert("সমস্যা হয়েছে: "+e.message);}
 };
 
-async function loadProducts() {
- const area = $("products");
- area.textContent = "Loading...";
- try {
-  const snapshot = await getDocs(collection(db,"products"));
-  area.innerHTML = "";
-  if(snapshot.empty) {
-   area.textContent = "কোনো পণ্য নেই।";
-   return;
-  }
+function nameInputReset(){
+["name","price","category","description"].forEach(id=>document.getElementById(id).value="");
+photo.value="";
+imageData="";
+preview.hidden=true;
+}
 
-  snapshot.forEach(item => {
-   const p = item.data();
-   const box = document.createElement("div");
-   box.className = "product";
-
-   const title = document.createElement("b");
-   title.textContent = p.name || "Unnamed product";
-
-   const details = document.createElement("p");
-   details.textContent =
-    "দাম: ৳" + (p.price ?? 0) +
-    " | ক্যাটাগরি: " + (p.category || "");
-
-   const del = document.createElement("button");
-   del.className = "delete";
-   del.textContent = "DELETE";
-   del.onclick = async () => {
-    if(confirm("এই পণ্যটি ডিলিট করবে?")) {
-     try {
-      await deleteDoc(doc(db,"products",item.id));
-      loadProducts();
-     } catch(e) {
-      alert("ডিলিট হয়নি। Firestore Rules পরীক্ষা করো।");
-     }
-    }
-   };
-
-   box.append(title,details,del);
-   area.appendChild(box);
-  });
- } catch(e) {
-  area.textContent = "পণ্য লোড হয়নি। Firestore Rules পরীক্ষা করো।";
- }
+async function loadProducts(){
+const area=document.getElementById("products");
+area.innerHTML="লোড হচ্ছে...";
+try{
+const snap=await getDocs(collection(db,"products"));
+area.innerHTML="";
+snap.forEach(d=>{
+const p=d.data();
+const item=document.createElement("div");
+item.className="product";
+const title=document.createElement("b");
+title.textContent=p.name+" — ৳"+p.price;
+item.appendChild(title);
+if(p.image){
+const im=document.createElement("img");
+im.src=p.image;
+item.appendChild(im);
+}
+const btn=document.createElement("button");
+btn.textContent="ডিলিট";
+btn.onclick=async()=>{
+if(confirm("পণ্যটি ডিলিট করবে?")){
+await deleteDoc(doc(db,"products",d.id));
+loadProducts();
+}
+};
+item.appendChild(btn);
+area.appendChild(item);
+});
+}catch(e){area.textContent="পণ্য লোড হয়নি: "+e.message;}
 }
 </script>
 </body>
-  </html>
+</html>
