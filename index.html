@@ -1,9 +1,91 @@
+
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+<meta charset="UTF-8">
+<meta name="google-site-verification" content="xVLBWHCG7Ocsslp_2QxrwZd2FmFhr5xEGfj3RHMEH6w">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>NEXORA SHOP | Online Shopping Bangladesh</title>
+
+<style>
+*{box-sizing:border-box}
+body{margin:0;background:#f4f3f8;color:#211b2d;font-family:Arial,sans-serif}
+header{background:#24113e;color:white;padding:22px 15px;text-align:center}
+header h1{margin:0;color:#d8b5ff;font-size:30px}
+header p{margin:7px 0 0}
+.admin{display:block;background:#9333ea;color:white;padding:12px;text-align:center;text-decoration:none;margin:12px;border-radius:9px}
+.search{padding:14px;background:white}
+input,textarea{width:100%;padding:13px;border:1px solid #ddd;border-radius:9px;font-size:15px;margin:5px 0}
+.categories{display:flex;gap:8px;overflow:auto;padding:12px;background:white}
+.categories button,.add{border:0;border-radius:20px;padding:10px 15px;background:#6e35a8;color:white;white-space:nowrap}
+h2{padding:0 14px}
+.products{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;padding:12px}
+.card{background:white;border-radius:13px;overflow:hidden;box-shadow:0 2px 8px #ddd}
+.card img{width:100%;height:145px;object-fit:cover}
+.info{padding:10px}
+.price{color:#6b269e;font-size:19px;font-weight:bold;margin:8px 0}
+.add{width:100%;border-radius:8px}
+#cart{background:white;margin:12px;padding:15px;border-radius:12px}
+.order{background:#24113e;color:white;padding:15px;margin:12px;border-radius:12px}
+.order h2{padding:0}
+.order button{width:100%;padding:13px;background:#22b66b;color:white;border:0;border-radius:8px;font-weight:bold}
+.contact{display:block;margin:10px 12px;padding:13px;text-align:center;background:#6e35a8;color:white;text-decoration:none;border-radius:9px}
+footer{text-align:center;padding:20px;background:#24113e;color:white;margin-top:20px}
+</style>
+</head>
+
+<body>
+
+<a class="admin" href="admin.html">Admin Login</a>
+
+<header>
+<h1>NEXORA SHOP</h1>
+<p>GAMING • MOBILE • ELECTRONICS • LIFESTYLE</p>
+</header>
+
+<div class="search">
+<input id="search" placeholder="পণ্য খুঁজুন..." oninput="showProducts()">
+</div>
+
+<div class="categories">
+<button onclick="setCategory('সব')">সব পণ্য</button>
+<button onclick="setCategory('Gaming')">Gaming</button>
+<button onclick="setCategory('Mobile')">Mobile</button>
+<button onclick="setCategory('Electronics')">Electronics</button>
+<button onclick="setCategory('Fashion')">Fashion</button>
+</div>
+
+<h2>আমাদের পণ্য</h2>
+<div class="products" id="products">পণ্য লোড হচ্ছে...</div>
+
+<div id="cart">
+<h2>🛒 আমার কার্ট</h2>
+<div id="cartItems">এখনো কোনো পণ্য যোগ করা হয়নি।</div>
+<h3 id="total">মোট: ৳0</h3>
+</div>
+
+<div class="order">
+<h2>অর্ডার তথ্য</h2>
+<input id="customer" placeholder="আপনার নাম">
+<input id="phone" placeholder="মোবাইল নম্বর">
+<textarea id="address" placeholder="ডেলিভারি ঠিকানা"></textarea>
+<button onclick="placeOrder()">WhatsApp-এ অর্ডার করুন</button>
+</div>
+
+<a class="contact" href="https://wa.me/8801824697173">মূল WhatsApp: 01824697173</a>
+<a class="contact" style="background:#444" href="https://wa.me/8801827635185">বিকল্প WhatsApp: 01827635185</a>
+
 <footer>© 2026 NEXORA SHOP | All Rights Reserved</footer>
 
-<script type="module"> 
+<script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/13.1.0/firebase-app.js";
+
 import {
-  getFirestore, collection, onSnapshot
+  getFirestore,
+  collection,
+  onSnapshot,
+  query,
+  where
 } from "https://www.gstatic.com/firebasejs/13.1.0/firebase-firestore.js";
 
 const firebaseConfig = {
@@ -35,36 +117,47 @@ window.showProducts = function() {
     (p.name || "").toLowerCase().includes(search)
   );
 
-  document.getElementById("products").innerHTML = list.map(p => `
+  const container = document.getElementById("products");
+
+  if (!list.length) {
+    container.textContent = "কোনো পণ্য পাওয়া যায়নি।";
+    return;
+  }
+
+  container.innerHTML = list.map(p => `
     <div class="card">
       <img src="${p.image || 'https://placehold.co/500x350?text=NEXORA+SHOP'}" alt="">
       <div class="info">
         <b>${p.name || ""}</b>
         <div>${p.category || ""}</div>
-        <div class="price">৳${p.price || 0}</div>
-        <button class="add" onclick="addCart('${p.id}')">কার্টে যোগ করুন</button>
+        <div class="price">৳${Number(p.price) || 0}</div>
+        <button class="add" data-id="${p.id}">কার্টে যোগ করুন</button>
       </div>
     </div>
-  `).join("") || "কোনো পণ্য পাওয়া যায়নি।";
+  `).join("");
+
+  container.querySelectorAll(".add").forEach(button => {
+    button.addEventListener("click", () => addCart(button.dataset.id));
+  });
 };
 
-window.addCart = function(id) {
+function addCart(id) {
   const p = products.find(x => x.id === id);
   if (!p) return;
 
   const item = cart.find(x => x.id === id);
   if (item) item.qty++;
-  else cart.push({...p, qty: 1});
+  else cart.push({...p, qty:1});
 
   showCart();
-};
+}
 
 function showCart() {
   document.getElementById("cartItems").innerHTML = cart.length
-    ? cart.map(p => `${p.name} × ${p.qty} — ৳${p.price * p.qty}`).join("<br>")
+    ? cart.map(p => `${p.name} × ${p.qty} — ৳${Number(p.price || 0)*p.qty}`).join("<br>")
     : "এখনো কোনো পণ্য যোগ করা হয়নি।";
 
-  const total = cart.reduce((s, p) => s + p.price * p.qty, 0);
+  const total = cart.reduce((s,p) => s + Number(p.price || 0)*p.qty, 0);
   document.getElementById("total").innerText = "মোট: ৳" + total;
 }
 
@@ -84,21 +177,28 @@ window.placeOrder = function() {
   }
 
   const details = cart.map(p =>
-    `${p.name} × ${p.qty} = ৳${p.price * p.qty}`
+    `${p.name} × ${p.qty} = ৳${Number(p.price || 0)*p.qty}`
   ).join("\n");
 
-  const total = cart.reduce((s, p) => s + p.price * p.qty, 0);
+  const total = cart.reduce((s,p) => s + Number(p.price || 0)*p.qty, 0);
   const msg = `NEXORA SHOP ORDER\nনাম: ${n}\nফোন: ${ph}\nঠিকানা: ${a}\n\n${details}\nমোট: ৳${total}`;
 
   window.open("https://wa.me/8801824697173?text=" + encodeURIComponent(msg), "_blank");
 };
 
-onSnapshot(collection(db, "products"), snapshot => {
-  products = snapshot.docs
-    .map(d => ({id: d.id, ...d.data()}))
-    .filter(p => p.active === true);
+const activeProducts = query(
+  collection(db, "products"),
+  where("active", "==", true)
+);
+
+onSnapshot(activeProducts, snapshot => {
+  products = snapshot.docs.map(d => ({
+    id: d.id,
+    ...d.data()
+  }));
 
   showProducts();
+
 }, error => {
   document.getElementById("products").textContent =
     "পণ্য লোড হয়নি: " + error.message;
@@ -106,6 +206,7 @@ onSnapshot(collection(db, "products"), snapshot => {
 
 showCart();
 </script>
+
 </body>
 </html>
 
