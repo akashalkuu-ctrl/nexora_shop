@@ -1,56 +1,68 @@
+
 <!DOCTYPE html>
 <html lang="bn">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>NEXORA SHOP ADMIN</title>
+<title>NEXORA ADMIN</title>
 <style>
-body{background:#10091f;color:white;font-family:Arial;padding:18px}
-.box{max-width:450px;margin:auto;background:#211437;padding:20px;border-radius:15px}
-input,select,textarea,button{width:100%;box-sizing:border-box;padding:12px;margin:7px 0;border:0;border-radius:8px}
-button{background:#9333ea;color:white;font-weight:bold}
-h2{color:#d8a5ff}
-.product{background:#35234c;padding:12px;margin:10px 0;border-radius:10px}
-img{width:100%;max-height:180px;object-fit:contain}
+*{box-sizing:border-box}
+body{margin:0;background:#0b1020;color:white;font-family:Arial,sans-serif}
+header{background:#151e35;padding:20px;text-align:center}
+header h2{color:#55e6c1;margin:0}
+.container{max-width:850px;margin:auto;padding:15px}
+.panel,.order{background:#151e35;padding:16px;border-radius:12px;margin:14px 0}
+input,select,button{width:100%;padding:13px;margin:7px 0;border:0;border-radius:8px;font-size:15px}
+input,select{background:#26334e;color:white}
+button{background:#20c997;color:#061b19;font-weight:bold}
+.logout{background:#e74c3c;color:white}
+.hidden{display:none}
+.small{color:#bdc9df;line-height:1.8;overflow-wrap:anywhere}
+.order h3{color:#55e6c1}
 </style>
 </head>
 <body>
-<div class="box">
-<h2>NEXORA SHOP ADMIN</h2>
+<header>
+<h2>NEXORA ADMIN</h2>
+<p>SHOP MANAGEMENT PANEL</p>
+</header>
 
-<div id="login">
-<input id="email" type="email" placeholder="Admin Email">
-<input id="password" type="password" placeholder="Admin Password">
-<button onclick="login()">LOGIN</button>
+<div class="container">
+<div class="panel" id="loginBox">
+<h3>Admin Login</h3>
+<input id="adminEmail" type="email" placeholder="Admin Email">
+<input id="adminPassword" type="password" placeholder="Password">
+<button id="loginButton">LOGIN</button>
+<p id="loginMessage"></p>
 </div>
 
-<div id="panel" hidden>
-<h3>নতুন পণ্য যোগ করুন</h3>
-<input id="name" placeholder="পণ্যের নাম">
-<input id="price" type="number" placeholder="দাম">
-<input id="category" placeholder="ক্যাটাগরি">
-<textarea id="description" placeholder="পণ্যের বিবরণ"></textarea>
-
-<label>গ্যালারি থেকে ছবি বাছাই করুন</label>
-<input id="photo" type="file" accept="image/*">
-<img id="preview" hidden>
-
-<button onclick="addProduct()">পণ্য যোগ করুন</button>
-<button onclick="logout()">LOGOUT</button>
-
-<h3>পণ্যের তালিকা</h3>
-<div id="products"></div>
+<div id="dashboard" class="hidden">
+<div class="panel">
+<h3>Dashboard</h3>
+<p>মোট অর্ডার: <b id="orderCount">0</b></p>
+<p>মোট অর্ডার মূল্য: ৳<b id="salesTotal">0</b></p>
+<button class="logout" id="logoutButton">LOGOUT</button>
+</div>
+<h3>সকল অর্ডার</h3>
+<div id="orderList">লোড হচ্ছে...</div>
 </div>
 </div>
 
 <script type="module">
-import {initializeApp} from "https://www.gstatic.com/firebasejs/13.1.0/firebase-app.js";
-import {getAuth,signInWithEmailAndPassword,signOut,onAuthStateChanged}
-from "https://www.gstatic.com/firebasejs/13.1.0/firebase-auth.js";
-import {getFirestore,collection,addDoc,getDocs,deleteDoc,doc}
-from "https://www.gstatic.com/firebasejs/13.1.0/firebase-firestore.js";
+import {initializeApp}
+from "https://www.gstatic.com/firebasejs/13.1.0/firebase-app.js";
 
-const firebaseConfig={
+import {
+getAuth,signInWithEmailAndPassword,
+onAuthStateChanged,signOut
+} from "https://www.gstatic.com/firebasejs/13.1.0/firebase-auth.js";
+
+import {
+getFirestore,collection,query,orderBy,
+onSnapshot,doc,updateDoc
+} from "https://www.gstatic.com/firebasejs/13.1.0/firebase-firestore.js";
+
+const firebaseConfig = {
 apiKey:"AIzaSyCkbbEN3rbFpec3r6Zxpn8GXc3sKVqb_Cg",
 authDomain:"nexora-shop-74244.firebaseapp.com",
 projectId:"nexora-shop-74244",
@@ -59,118 +71,162 @@ messagingSenderId:"536829579657",
 appId:"1:536829579657:web:ca3c6a12cb523c3a0b5158"
 };
 
-const app=initializeApp(firebaseConfig);
-const auth=getAuth(app);
-const db=getFirestore(app);
+const ADMIN_UID="bsFhoPSLDeMgARABCtSU8DcxdZX2";
+const firebaseApp=initializeApp(firebaseConfig);
+const auth=getAuth(firebaseApp);
+const db=getFirestore(firebaseApp);
 
-window.login=async()=>{
+const loginBox=document.getElementById("loginBox");
+const dashboard=document.getElementById("dashboard");
+const orderList=document.getElementById("orderList");
+const loginMessage=document.getElementById("loginMessage");
+
+let unsubscribeOrders=null;
+
+function safeText(value){
+return String(value ?? "").replace(/[&<>"']/g,c=>({
+"&":"&amp;","<":"&lt;",">":"&gt;",
+'"':"&quot;","'":"&#039;"
+}[c]));
+}
+
+document.getElementById("loginButton").onclick=async()=>{
+const email=document.getElementById("adminEmail").value.trim();
+const password=document.getElementById("adminPassword").value;
+
+if(!email || !password){
+loginMessage.textContent="Email ও Password দাও";
+return;
+}
+
 try{
-await signInWithEmailAndPassword(auth,email.value,password.value);
-}catch(e){alert("লগইন হয়নি: "+e.message);}
+await signInWithEmailAndPassword(auth,email,password);
+loginMessage.textContent="";
+}catch(error){
+loginMessage.textContent="Login হয়নি: "+error.message;
+}
 };
 
-window.logout=()=>signOut(auth);
+document.getElementById("logoutButton").onclick=()=>{
+signOut(auth);
+};
 
 onAuthStateChanged(auth,user=>{
-loginDiv(user);
-if(user)loadProducts();
+
+if(unsubscribeOrders){
+unsubscribeOrders();
+unsubscribeOrders=null;
+}
+
+if(!user){
+loginBox.classList.remove("hidden");
+dashboard.classList.add("hidden");
+return;
+}
+
+if(user.uid!==ADMIN_UID){
+alert("এই অ্যাকাউন্ট Admin নয়");
+signOut(auth);
+return;
+}
+
+loginBox.classList.add("hidden");
+dashboard.classList.remove("hidden");
+loadOrders();
 });
 
-function loginDiv(user){
-document.getElementById("login").hidden=!!user;
-document.getElementById("panel").hidden=!user;
-}
+function loadOrders(){
 
-let imageData="";
+const orderQuery=query(
+collection(db,"orders"),
+orderBy("createdAt","desc")
+);
 
-photo.addEventListener("change",()=>{
-const file=photo.files[0];
-if(!file)return;
-if(file.size>5*1024*1024){
-alert("৫ MB-এর কম ছবি নির্বাচন করো");
-photo.value="";
-return;
-}
-const reader=new FileReader();
-reader.onload=()=>{
-const img=new Image();
-img.onload=()=>{
-const canvas=document.createElement("canvas");
-const scale=Math.min(500/img.width,500/img.height,1);
-canvas.width=img.width*scale;
-canvas.height=img.height*scale;
-canvas.getContext("2d").drawImage(img,0,0,canvas.width,canvas.height);
-imageData=canvas.toDataURL("image/jpeg",0.6);
-preview.src=imageData;
-preview.hidden=false;
-};
-img.src=reader.result;
-};
-reader.readAsDataURL(file);
+unsubscribeOrders=onSnapshot(orderQuery,snapshot=>{
+
+document.getElementById("orderCount").textContent=snapshot.size;
+
+let total=0;
+snapshot.forEach(record=>{
+total+=Number(record.data().total||0);
 });
 
-window.addProduct=async()=>{
-const name=document.getElementById("name").value.trim();
-const price=Number(document.getElementById("price").value);
-const category=document.getElementById("category").value.trim();
-const description=document.getElementById("description").value.trim();
+document.getElementById("salesTotal").textContent=
+total.toLocaleString("en-US");
 
-if(!name||!price||!category){
-alert("নাম, দাম ও ক্যাটাগরি লিখো");
+if(snapshot.empty){
+orderList.innerHTML="<p>এখনো কোনো অর্ডার নেই।</p>";
 return;
 }
-if(!imageData){
-alert("গ্যালারি থেকে ছবি নির্বাচন করো");
-return;
-}
+
+orderList.innerHTML=snapshot.docs.map(record=>{
+
+const data=record.data();
+const orderId=record.id;
+
+const orderDate=data.createdAt?.toDate
+?data.createdAt.toDate().toLocaleString("bn-BD")
+:"সময় পাওয়া যায়নি";
+
+const productList=Array.isArray(data.items)
+?data.items.map(product=>
+`<p>${safeText(product.name)} × ${safeText(product.qty)} — ৳${safeText(product.price)}</p>`
+).join("")
+:"পণ্যের তথ্য নেই";
+
+return `
+<div class="order">
+<h3>অর্ডার #${safeText(orderId)}</h3>
+<div class="small">
+নাম: ${safeText(data.customerName)}<br>
+ফোন: ${safeText(data.phone)}<br>
+ঠিকানা: ${safeText(data.address)}<br>
+পেমেন্ট: ${safeText(data.paymentMethod)}<br>
+Transaction ID: ${safeText(data.transactionId||"নেই")}<br>
+সময়: ${safeText(orderDate)}
+</div>
+<hr>
+<b>পণ্য:</b>
+${productList}
+<h3>মোট: ৳${safeText(data.total)}</h3>
+<p>বর্তমান Status: ${safeText(data.status)}</p>
+<select id="status-${safeText(orderId)}">
+<option value="pending">Pending</option>
+<option value="confirmed">Confirmed</option>
+<option value="processing">Processing</option>
+<option value="shipped">Shipped</option>
+<option value="delivered">Delivered</option>
+<option value="cancelled">Cancelled</option>
+</select>
+<button data-update-id="${safeText(orderId)}">UPDATE STATUS</button>
+</div>
+`;
+}).join("");
+
+snapshot.docs.forEach(record=>{
+const select=document.getElementById("status-"+record.id);
+if(select) select.value=record.data().status||"pending";
+});
+
+orderList.querySelectorAll("[data-update-id]").forEach(button=>{
+button.onclick=async()=>{
+const orderId=button.dataset.updateId;
+const select=document.getElementById("status-"+orderId);
 
 try{
-await addDoc(collection(db,"products"),{
-name,price,category,description,image:imageData,active:true
+await updateDoc(doc(db,"orders",orderId),{
+status:select.value
 });
-alert("পণ্য যোগ হয়েছে!");
-nameInputReset();
-loadProducts();
-}catch(e){alert("সমস্যা হয়েছে: "+e.message);}
-};
-
-function nameInputReset(){
-["name","price","category","description"].forEach(id=>document.getElementById(id).value="");
-photo.value="";
-imageData="";
-preview.hidden=true;
-}
-
-async function loadProducts(){
-const area=document.getElementById("products");
-area.innerHTML="লোড হচ্ছে...";
-try{
-const snap=await getDocs(collection(db,"products"));
-area.innerHTML="";
-snap.forEach(d=>{
-const p=d.data();
-const item=document.createElement("div");
-item.className="product";
-const title=document.createElement("b");
-title.textContent=p.name+" — ৳"+p.price;
-item.appendChild(title);
-if(p.image){
-const im=document.createElement("img");
-im.src=p.image;
-item.appendChild(im);
-}
-const btn=document.createElement("button");
-btn.textContent="ডিলিট";
-btn.onclick=async()=>{
-if(confirm("পণ্যটি ডিলিট করবে?")){
-await deleteDoc(doc(db,"products",d.id));
-loadProducts();
+alert("Status আপডেট হয়েছে");
+}catch(error){
+alert("আপডেট হয়নি: "+error.message);
 }
 };
-item.appendChild(btn);
-area.appendChild(item);
 });
-}catch(e){area.textContent="পণ্য লোড হয়নি: "+e.message;}
+
+},error=>{
+orderList.textContent="অর্ডার লোড হয়নি: "+error.message;
+});
 }
 </script>
 </body>
