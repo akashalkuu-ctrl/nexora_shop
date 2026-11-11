@@ -29,6 +29,7 @@ h2{padding:0 14px}
 .order{background:#24113e;color:white;padding:15px;margin:12px;border-radius:12px}
 .order h2{padding:0}
 .order button{width:100%;padding:13px;background:#22b66b;color:white;border:0;border-radius:8px;font-weight:bold}
+.order button:disabled{opacity:.6}
 .payment-info{background:#fff;color:#24113e;padding:12px;border-radius:9px;margin:10px 0}
 .payment-info p{margin:6px 0}
 .contact{display:block;margin:10px 12px;padding:13px;text-align:center;background:#6e35a8;color:white;text-decoration:none;border-radius:9px}
@@ -63,7 +64,7 @@ footer{text-align:center;padding:20px;background:#24113e;color:white;margin-top:
 <div id="cart">
 <h2>🛒 আমার কার্ট</h2>
 <div id="cartItems">এখনো কোনো পণ্য যোগ করা হয়নি।</div>
-<h3 id="total">মোট: ৳0</h3>
+<div id="cartTotals"></div>
 </div>
 
 <div class="order">
@@ -127,6 +128,9 @@ const firebaseConfig = {
 
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
+
+// সারা বাংলাদেশে নির্দিষ্ট ডেলিভারি চার্জ
+const DELIVERY_CHARGE = 130;
 
 let products = [];
 let cart = [];
@@ -207,12 +211,25 @@ function showCart() {
       ).join("<br>")
     : "এখনো কোনো পণ্য যোগ করা হয়নি।";
 
-  const total = cart.reduce(
+  const subtotal = cart.reduce(
     (s,p) => s + Number(p.price || 0)*p.qty, 0
   );
 
-  document.getElementById("total").innerText =
-    "মোট: ৳" + total;
+  const deliveryCharge = cart.length ? DELIVERY_CHARGE : 0;
+  const grandTotal = subtotal + deliveryCharge;
+
+  document.getElementById("cartTotals").innerHTML = `
+    <div style="display:flex;justify-content:space-between;margin:10px 0">
+      <span>পণ্যের মোট দাম</span><b>৳${subtotal}</b>
+    </div>
+    <div style="display:flex;justify-content:space-between;margin:10px 0">
+      <span>ডেলিভারি চার্জ (সারা বাংলাদেশ)</span><b>৳${deliveryCharge}</b>
+    </div>
+    <hr>
+    <div style="display:flex;justify-content:space-between;font-size:21px;font-weight:bold;color:#6b269e;margin:10px 0">
+      <span>সর্বমোট</span><span>৳${grandTotal}</span>
+    </div>
+  `;
 }
 
 window.showPaymentInfo = function() {
@@ -290,9 +307,12 @@ window.placeOrder = async function() {
     return;
   }
 
-  const total = cart.reduce(
+  const subtotal = cart.reduce(
     (s,p) => s + Number(p.price || 0)*p.qty, 0
   );
+
+  const deliveryCharge = DELIVERY_CHARGE;
+  const total = subtotal + deliveryCharge;
 
   const items = cart.map(p => ({
     productId: p.id,
@@ -317,6 +337,8 @@ window.placeOrder = async function() {
       phone: ph,
       address: a,
       items: items,
+      subtotal: subtotal,
+      deliveryCharge: deliveryCharge,
       total: total,
       paymentMethod: method,
       transactionId: transactionId,
@@ -350,7 +372,9 @@ Transaction ID: ${transactionId || "প্রযোজ্য নয়"}
 
 ${details}
 
-মোট: ৳${total}`;
+পণ্যের মোট দাম: ৳${subtotal}
+ডেলিভারি চার্জ: ৳${deliveryCharge}
+সর্বমোট: ৳${total}`;
 
     const whatsappURL =
       "https://wa.me/8801824697173?text=" +
@@ -413,4 +437,3 @@ showPaymentInfo();
 
 </body>
 </html>
-
