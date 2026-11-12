@@ -13,7 +13,7 @@ body{margin:0;background:#f4f3f8;color:#211b2d;font-family:Arial,sans-serif}
 header{background:#24113e;color:white;padding:22px 15px;text-align:center}
 header h1{margin:0;color:#d8b5ff;font-size:30px}
 header p{margin:7px 0 0}
-.admin{display:block;background:#9333ea;color:white;padding:12px;text-align:center;text-decoration:none;margin:12px;border-radius:9px}
+.admin,.contact{display:block;background:#9333ea;color:white;padding:12px;text-align:center;text-decoration:none;margin:12px;border-radius:9px}
 .search{padding:14px;background:white}
 input,textarea,select{width:100%;padding:13px;border:1px solid #ddd;border-radius:9px;font-size:15px;margin:5px 0}
 .categories{display:flex;gap:8px;overflow:auto;padding:12px;background:white}
@@ -25,14 +25,15 @@ h2{padding:0 14px}
 .info{padding:10px}
 .price{color:#6b269e;font-size:19px;font-weight:bold;margin:8px 0}
 .add{width:100%;border-radius:8px;cursor:pointer}
-#cart{background:white;margin:12px;padding:15px;border-radius:12px}
+#cart,.tracking{background:white;margin:12px;padding:15px;border-radius:12px}
 .order{background:#24113e;color:white;padding:15px;margin:12px;border-radius:12px}
 .order h2{padding:0}
-.order button{width:100%;padding:13px;background:#22b66b;color:white;border:0;border-radius:8px;font-weight:bold}
-.order button:disabled{opacity:.6}
+.order button,.tracking button{width:100%;padding:13px;background:#22b66b;color:white;border:0;border-radius:8px;font-weight:bold;margin-top:8px}
+.order button:disabled,.tracking button:disabled{opacity:.6}
 .payment-info{background:#fff;color:#24113e;padding:12px;border-radius:9px;margin:10px 0}
 .payment-info p{margin:6px 0}
-.contact{display:block;margin:10px 12px;padding:13px;text-align:center;background:#6e35a8;color:white;text-decoration:none;border-radius:9px}
+.tracking h2{padding:0}
+.track-result{background:#f4f3f8;padding:12px;border-radius:9px;margin-top:12px;line-height:1.8}
 footer{text-align:center;padding:20px;background:#24113e;color:white;margin-top:20px}
 </style>
 </head>
@@ -86,14 +87,38 @@ footer{text-align:center;padding:20px;background:#24113e;color:white;margin-top:
 <p>পণ্য হাতে পেয়ে টাকা পরিশোধ করুন।</p>
 </div>
 
-<input id="transactionId"
-placeholder="Transaction ID (bKash/Nagad হলে লিখুন)">
+<input id="transactionId" placeholder="Transaction ID (bKash/Nagad হলে লিখুন)">
 
 <button id="orderButton" onclick="placeOrder()">
 অর্ডার কনফার্ম করুন
 </button>
 
 <p id="orderMessage"></p>
+</div>
+
+<!-- কাস্টমার অর্ডার ট্র্যাকিং -->
+<div class="tracking">
+<h2>📦 আমার অর্ডার ট্র্যাক করুন</h2>
+<p>অর্ডার করার সময় ব্যবহৃত মোবাইল নম্বর ও ৮ সংখ্যার Order ID দিন।</p>
+
+<input id="trackOrderId" inputmode="numeric" maxlength="8" placeholder="৮ সংখ্যার Order ID">
+<input id="trackPhone" type="tel" placeholder="অর্ডারের মোবাইল নম্বর">
+
+<div id="recaptcha-container"></div>
+
+<button id="sendOtpButton" onclick="sendOrderOTP()">
+OTP পাঠান
+</button>
+
+<div id="otpArea" style="display:none">
+<input id="otpCode" inputmode="numeric" maxlength="6" placeholder="SMS-এ পাওয়া OTP লিখুন">
+<button id="verifyOtpButton" onclick="verifyOrderOTP()">
+OTP যাচাই করে অর্ডার দেখুন
+</button>
+</div>
+
+<p id="trackMessage"></p>
+<div id="trackResult"></div>
 </div>
 
 <a class="contact" href="https://wa.me/8801824697173">মূল WhatsApp: 01824697173</a>
@@ -112,10 +137,19 @@ import {
   onSnapshot,
   query,
   where,
-  addDoc,
+  doc,
+  setDoc,
+  getDoc,
   serverTimestamp
 } from
 "https://www.gstatic.com/firebasejs/13.1.0/firebase-firestore.js";
+
+import {
+  getAuth,
+  RecaptchaVerifier,
+  signInWithPhoneNumber
+} from
+"https://www.gstatic.com/firebasejs/13.1.0/firebase-auth.js";
 
 const firebaseConfig = {
   apiKey: "AIzaSyCkbbEN3rbFpec3r6Zxpn8GXc3sKVqb_Cg",
@@ -128,13 +162,16 @@ const firebaseConfig = {
 
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
+const auth = getAuth(app);
 
-// সারা বাংলাদেশে নির্দিষ্ট ডেলিভারি চার্জ
 const DELIVERY_CHARGE = 130;
 
 let products = [];
 let cart = [];
 let category = "সব";
+let confirmationResult = null;
+let recaptchaVerifier = null;
+let trackPhoneE164 = "";
 
 function escapeHTML(value) {
   return String(value ?? "").replace(/[&<>"']/g, c => ({
@@ -146,13 +183,16 @@ function escapeHTML(value) {
   })[c]);
 }
 
+function toE164(phone) {
+  return "+88" + phone;
+}
+
 window.setCategory = function(c) {
   category = c;
   showProducts();
 };
 
 window.showProducts = function() {
-
   const search =
     document.getElementById("search").value.toLowerCase();
 
@@ -185,7 +225,6 @@ window.showProducts = function() {
   container.querySelectorAll(".add").forEach(button => {
     button.addEventListener("click", () => {
       addCart(button.dataset.id);
-
       document.getElementById("cart").scrollIntoView({
         behavior: "smooth",
         block: "start"
@@ -195,7 +234,6 @@ window.showProducts = function() {
 };
 
 function addCart(id) {
-
   const p = products.find(x => x.id === id);
   if (!p) return;
 
@@ -208,7 +246,6 @@ function addCart(id) {
 }
 
 function showCart() {
-
   document.getElementById("cartItems").innerHTML =
     cart.length
     ? cart.map(p =>
@@ -228,7 +265,7 @@ function showCart() {
       <span>পণ্যের মোট দাম</span><b>৳${subtotal}</b>
     </div>
     <div style="display:flex;justify-content:space-between;margin:10px 0">
-      <span>ডেলিভারি চার্জ (সারা বাংলাদেশ)</span><b>৳${deliveryCharge}</b>
+      <span>ডেলিভারি চার্জ</span><b>৳${deliveryCharge}</b>
     </div>
     <hr>
     <div style="display:flex;justify-content:space-between;font-size:21px;font-weight:bold;color:#6b269e;margin:10px 0">
@@ -238,77 +275,60 @@ function showCart() {
 }
 
 window.showPaymentInfo = function() {
-
-  const method =
-    document.getElementById("paymentMethod").value;
-
+  const method = document.getElementById("paymentMethod").value;
   const box = document.getElementById("paymentInfo");
   const transaction = document.getElementById("transactionId");
 
   if (method === "COD") {
-
-    box.innerHTML =
-      "<p>পণ্য হাতে পেয়ে টাকা পরিশোধ করুন।</p>";
-
+    box.innerHTML = "<p>পণ্য হাতে পেয়ে টাকা পরিশোধ করুন।</p>";
     transaction.style.display = "none";
     transaction.value = "";
-
   } else if (method === "BKASH") {
-
     box.innerHTML = `
       <p><b>bKash Payment</b></p>
       <p>পেমেন্ট নম্বর: 01824697173</p>
       <p>পেমেন্ট করার পর Transaction ID লিখুন।</p>
     `;
-
     transaction.style.display = "block";
-
   } else {
-
     box.innerHTML = `
       <p><b>Nagad Payment</b></p>
       <p>পেমেন্ট নম্বর: 01870803145</p>
       <p>পেমেন্ট করার পর Transaction ID লিখুন।</p>
     `;
-
     transaction.style.display = "block";
   }
 };
 
-window.placeOrder = async function() {
+function makeOrderId() {
+  return String(Math.floor(10000000 + Math.random() * 90000000));
+}
 
+window.placeOrder = async function() {
   if (!cart.length) {
-    alert("আগে অর্ডার করুন বাটনে চাপ দিয়ে পণ্য নির্বাচন করুন");
+    alert("আগে পণ্য নির্বাচন করুন।");
     return;
   }
 
-  const n =
-    document.getElementById("customer").value.trim();
-
-  const ph =
-    document.getElementById("phone").value.trim();
-
-  const a =
-    document.getElementById("address").value.trim();
-
-  const method =
-    document.getElementById("paymentMethod").value;
-
+  const n = document.getElementById("customer").value.trim();
+  const ph = document.getElementById("phone").value.trim();
+  const a = document.getElementById("address").value.trim();
+  const method = document.getElementById("paymentMethod").value;
   const transactionId =
     document.getElementById("transactionId").value.trim();
 
   if (!n || !ph || !a) {
-    alert("সব তথ্য পূরণ করুন");
+    alert("সব তথ্য পূরণ করুন।");
     return;
   }
 
   if (!/^01[3-9]\d{8}$/.test(ph)) {
-    alert("সঠিক ১১ সংখ্যার বাংলাদেশি মোবাইল নম্বর দিন");
+    alert("সঠিক ১১ সংখ্যার বাংলাদেশি মোবাইল নম্বর দিন।");
     return;
   }
 
   if (method !== "COD" && !transactionId) {
-    alert("পেমেন্টের Transaction ID লিখুন");
+    alert("পেমেন্টের Transaction ID লিখুন।");
     return;
   }
 
@@ -318,6 +338,7 @@ window.placeOrder = async function() {
 
   const deliveryCharge = DELIVERY_CHARGE;
   const total = subtotal + deliveryCharge;
+  const phoneE164 = toE164(ph);
 
   const items = cart.map(p => ({
     productId: p.id,
@@ -326,20 +347,17 @@ window.placeOrder = async function() {
     qty: p.qty
   }));
 
-  const orderButton =
-    document.getElementById("orderButton");
-
-  const messageBox =
-    document.getElementById("orderMessage");
+  const orderButton = document.getElementById("orderButton");
+  const messageBox = document.getElementById("orderMessage");
 
   orderButton.disabled = true;
   orderButton.innerText = "অর্ডার সেভ হচ্ছে...";
 
   try {
-
     const orderData = {
       customerName: n,
       phone: ph,
+      phoneE164: phoneE164,
       address: a,
       items: items,
       subtotal: subtotal,
@@ -347,14 +365,30 @@ window.placeOrder = async function() {
       total: total,
       paymentMethod: method,
       transactionId: transactionId,
-      status: "pending",
+      status: "Pending",
       createdAt: serverTimestamp()
     };
 
-    const orderRef = await addDoc(
-      collection(db, "orders"),
-      orderData
-    );
+    let orderId = "";
+    let saved = false;
+
+    // ৮ সংখ্যার ইউনিক document ID তৈরি
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const candidate = makeOrderId();
+
+      try {
+        await setDoc(doc(db, "orders", candidate), orderData);
+        orderId = candidate;
+        saved = true;
+        break;
+      } catch (error) {
+        console.error("Order save attempt:", error);
+
+        if (attempt === 4) throw error;
+      }
+    }
+
+    if (!saved) throw new Error("অর্ডার তৈরি করা যায়নি।");
 
     const details = cart.map(p =>
       `${p.name} × ${p.qty} = ৳${Number(p.price || 0)*p.qty}`
@@ -368,7 +402,7 @@ window.placeOrder = async function() {
 
     const msg =
 `NEXORA SHOP ORDER
-Order ID: ${orderRef.id}
+Order ID: ${orderId}
 নাম: ${n}
 ফোন: ${ph}
 ঠিকানা: ${a}
@@ -385,8 +419,8 @@ ${details}
       "https://wa.me/8801824697173?text=" +
       encodeURIComponent(msg);
 
-    messageBox.innerText =
-      "অর্ডার সফলভাবে সেভ হয়েছে!";
+    messageBox.innerHTML =
+      `অর্ডার সফল হয়েছে!<br>আপনার Order ID: <b>${orderId}</b><br>এই নম্বরটি সংরক্ষণ করুন।`;
 
     cart = [];
     showCart();
@@ -399,28 +433,167 @@ ${details}
     window.open(whatsappURL, "_blank");
 
   } catch(error) {
-
     console.error(error);
-
     messageBox.innerText =
-      "অর্ডার সেভ হয়নি। Firebase Rules পরীক্ষা করুন।";
-
+      "অর্ডার সেভ হয়নি। Firebase Rules ও তথ্য পরীক্ষা করুন।";
     alert("অর্ডার সেভ হয়নি: " + error.message);
-
   } finally {
-
     orderButton.disabled = false;
     orderButton.innerText = "অর্ডার কনফার্ম করুন";
   }
 };
 
+// OTP verifier তৈরি
+function getRecaptcha() {
+  if (!recaptchaVerifier) {
+    recaptchaVerifier = new RecaptchaVerifier(
+      auth,
+      "recaptcha-container",
+      { size: "invisible" }
+    );
+  }
+  return recaptchaVerifier;
+}
+
+// কাস্টমারের ফোনে OTP পাঠানো
+window.sendOrderOTP = async function() {
+  const orderId =
+    document.getElementById("trackOrderId").value.trim();
+
+  const phone =
+    document.getElementById("trackPhone").value.trim();
+
+  const message = document.getElementById("trackMessage");
+  const button = document.getElementById("sendOtpButton");
+
+  if (!/^[0-9]{8}$/.test(orderId)) {
+    message.innerText = "সঠিক ৮ সংখ্যার Order ID লিখুন।";
+    return;
+  }
+
+  if (!/^01[3-9]\d{8}$/.test(phone)) {
+    message.innerText = "সঠিক ১১ সংখ্যার মোবাইল নম্বর লিখুন।";
+    return;
+  }
+
+  button.disabled = true;
+  message.innerText = "OTP পাঠানো হচ্ছে...";
+
+  try {
+    trackPhoneE164 = toE164(phone);
+
+    const verifier = getRecaptcha();
+
+    confirmationResult = await signInWithPhoneNumber(
+      auth,
+      trackPhoneE164,
+      verifier
+    );
+
+    document.getElementById("otpArea").style.display = "block";
+    message.innerText = "আপনার মোবাইলে OTP পাঠানো হয়েছে।";
+
+  } catch(error) {
+    console.error(error);
+    message.innerText = "OTP পাঠানো যায়নি: " + error.message;
+
+    if (recaptchaVerifier) {
+      recaptchaVerifier.clear();
+      recaptchaVerifier = null;
+    }
+  } finally {
+    button.disabled = false;
+  }
+};
+
+// OTP যাচাই করে নিজের অর্ডার দেখা
+window.verifyOrderOTP = async function() {
+  const orderId =
+    document.getElementById("trackOrderId").value.trim();
+
+  const code =
+    document.getElementById("otpCode").value.trim();
+
+  const message = document.getElementById("trackMessage");
+  const result = document.getElementById("trackResult");
+  const button = document.getElementById("verifyOtpButton");
+
+  if (!confirmationResult) {
+    message.innerText = "আগে OTP পাঠান।";
+    return;
+  }
+
+  if (!/^[0-9]{6}$/.test(code)) {
+    message.innerText = "৬ সংখ্যার OTP লিখুন।";
+    return;
+  }
+
+  button.disabled = true;
+  message.innerText = "OTP যাচাই হচ্ছে...";
+  result.innerHTML = "";
+
+  try {
+    await confirmationResult.confirm(code);
+
+    const orderRef = doc(db, "orders", orderId);
+    const orderSnap = await getDoc(orderRef);
+
+    if (!orderSnap.exists()) {
+      message.innerText = "এই Order ID পাওয়া যায়নি।";
+      return;
+    }
+
+    const order = orderSnap.data();
+
+    if (order.phoneE164 !== trackPhoneE164) {
+      message.innerText = "এই নম্বরের সঙ্গে অর্ডারের মিল নেই।";
+      return;
+    }
+
+    const itemList = (order.items || []).map(item =>
+      `<div>${escapeHTML(item.name)} × ${Number(item.qty) || 0}</div>`
+    ).join("");
+
+    result.innerHTML = `
+      <div class="track-result">
+        <h3>আপনার অর্ডারের তথ্য</h3>
+        <b>Order ID:</b> ${escapeHTML(orderId)}<br>
+        <b>নাম:</b> ${escapeHTML(order.customerName)}<br>
+        <b>ফোন:</b> ${escapeHTML(order.phone)}<br>
+        <b>ঠিকানা:</b> ${escapeHTML(order.address)}<br>
+        <b>অর্ডার Status:</b> ${escapeHTML(order.status)}<br>
+        <hr>
+        <b>পণ্য:</b><br>
+        ${itemList}
+        <hr>
+        <b>সর্বমোট: ৳${Number(order.total) || 0}</b>
+      </div>
+    `;
+
+    message.innerText = "OTP যাচাই সফল হয়েছে।";
+
+  } catch(error) {
+    console.error(error);
+
+    if (error.code === "permission-denied") {
+      message.innerText =
+        "এই অর্ডারটি এই ফোন নম্বরের নয়, অথবা Firestore Rules আপডেট হয়নি।";
+    } else {
+      message.innerText =
+        "OTP যাচাই হয়নি: " + error.message;
+    }
+  } finally {
+    button.disabled = false;
+  }
+};
+
+// সক্রিয় পণ্য লোড
 const activeProducts = query(
   collection(db, "products"),
   where("active", "==", true)
 );
 
 onSnapshot(activeProducts, snapshot => {
-
   products = snapshot.docs.map(d => ({
     id: d.id,
     ...d.data()
@@ -429,16 +602,13 @@ onSnapshot(activeProducts, snapshot => {
   showProducts();
 
 }, error => {
-
   document.getElementById("products").textContent =
     "পণ্য লোড হয়নি: " + error.message;
-
 });
 
 showCart();
 showPaymentInfo();
 
 </script>
-
 </body>
 </html>
